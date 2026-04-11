@@ -15,11 +15,13 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, re_path
+from django.urls import path, re_path, include
+from django.conf.urls.static import static
 from rest_framework import permissions
 from drf_yasg import openapi
 from drf_yasg.views import get_schema_view
-
+from travels.admin import admin_site
+from etravelbookingapis import settings
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -34,7 +36,10 @@ schema_view = get_schema_view(
 )
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path('', include('travels.urls')),
+    path('admin/', admin_site.urls),
+    path('o/', include('oauth2_provider.urls',
+            namespace='oauth2_provider')),
     re_path(r'^swagger(?P<format>\.json|\.yaml)$',
             schema_view.without_ui(cache_timeout=0),
             name='schema-json'),
@@ -44,4 +49,6 @@ urlpatterns = [
     re_path(r'^redoc/$',
             schema_view.with_ui('redoc', cache_timeout=0),
             name='schema-redoc'),
-]
+    re_path(r'^ckeditor/',
+            include('ckeditor_uploader.urls')),
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

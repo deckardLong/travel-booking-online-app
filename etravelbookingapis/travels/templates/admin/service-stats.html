@@ -1,0 +1,96 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div id="content-main" style="padding: 20px;">
+    <h1 style="color: #79aec8; margin-bottom: 20px;">Biểu đồ Thống kê Dịch vụ</h1>
+
+    <div style="background: #1e1e1e; padding: 25px; border-radius: 12px; margin-bottom: 30px; border: 1px solid #333; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+        <canvas id="myChart" style="max-height: 400px; width: 100%;"></canvas>
+    </div>
+
+    <div class="module" style="background: #264b5d; border-radius: 8px; padding: 15px; margin-bottom: 20px; color: white;">
+        <p style="margin: 5px 0;"><strong>Tổng dịch vụ đang hoạt động:</strong> {{ total_active }}</p>
+        <p style="margin: 5px 0;"><strong>Cơ cấu:</strong> {{ type_counts.tours }} Tour, {{ type_counts.hotels }} Khách sạn, {{ type_counts.transports }} Phương tiện</p>
+    </div>
+
+    <div class="results" style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; background: #121212; color: #eee; border-radius: 8px; overflow: hidden;">
+            <thead>
+                <tr style="background: #417690; color: white;">
+                    <th style="padding: 12px; text-align: left; border: 1px solid #333;">ID</th>
+                    <th style="padding: 12px; text-align: left; border: 1px solid #333;">Tên Dịch Vụ</th>
+                    <th style="padding: 12px; text-align: center; border: 1px solid #333;">Số lượt đặt chỗ</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in service_stats %}
+                <tr class="stat-row" style="border-bottom: 1px solid #222;">
+                    <td style="padding: 12px; border: 1px solid #222;">{{ s.id }}</td>
+                    <td style="padding: 12px; border: 1px solid #222;">{{ s.name }}</td>
+                    <td style="padding: 12px; text-align: center; border: 1px solid #222; color: #ffeb3b; font-weight: bold;">{{ s.booking_count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    const labels = [];
+    const dataValues = [];
+
+    {% for s in service_stats %}
+        labels.push("{{ s.name|escapejs }}");
+        dataValues.push({{ s.booking_count }});
+    {% endfor %}
+
+    const ctx = document.getElementById('myChart').getContext('2d');
+    
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Số lượt đặt chỗ',
+                data: dataValues,
+                backgroundColor: 'rgba(121, 174, 200, 0.7)', 
+                borderColor: '#79aec8',
+                borderWidth: 2,
+                borderRadius: 4,
+                hoverBackgroundColor: '#417690'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: { color: '#333' },
+                    ticks: { color: '#bbb' }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { 
+                        color: '#bbb',
+                        maxRotation: 45,
+                        minRotation: 45 
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    labels: { color: '#fff', font: { size: 14 } }
+                }
+            }
+        }
+    });
+</script>
+
+<style>
+    .stat-row:nth-child(even) { background: #1a1a1a; }
+    .stat-row:hover { background: #333 !important; }
+</style>
+{% endblock %}

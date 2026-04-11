@@ -1,7 +1,9 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.utils import timezone
 from cloudinary.models import CloudinaryField
+from ckeditor.fields import RichTextField
 
 # Create your models here.
 class MyUserManager(BaseUserManager):
@@ -36,7 +38,7 @@ class User(AbstractUser):
 
 class BaseModel(models.Model):
     active = models.BooleanField(default=True)
-    created_date = models.DateTimeField(auto_now_add=True)
+    created_date = models.DateTimeField(default=timezone.now, editable=False)
     updated_date = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -45,7 +47,7 @@ class BaseModel(models.Model):
 
 class BaseService(BaseModel):
     name = models.CharField(max_length=50, unique=True)
-    description = models.TextField(null=True)
+    description = RichTextField(null=True)
     image = CloudinaryField(null=True)
     price = models.DecimalField(max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
     location = models.CharField(max_length=50, null=True)
@@ -81,6 +83,10 @@ class TransportService(BaseService):
     departure_time = models.DateTimeField()
     seat_capacity = models.IntegerField(validators=[MinValueValidator(1)])                               
 
+class ComboService(BaseService):
+    tour = models.ForeignKey(TourService, on_delete=models.SET_NULL, null=True, blank=True)
+    hotel = models.ForeignKey(HotelService, on_delete=models.SET_NULL, null=True, blank=True)
+    transport = models.ForeignKey(TransportService, on_delete=models.SET_NULL, null=True, blank=True)
 
 
 class Booking(BaseModel):  
@@ -107,8 +113,18 @@ class Payment(BaseModel):
         ('MOMO', 'MoMo'),
         ('ZALOPAY', 'ZaloPay'),
     ] 
+
+    STATUS_CHOICES = [
+        ('PENDING', 'Đang xử lý'),
+        ('COMPLETED', 'Đã thành công'),
+        ('FAILED', 'Đã thất bại'),
+    ]
+
     method_type = models.CharField(max_length=10, choices=METHOD_CHOICES, default='CASH')
     amount = models.DecimalField(max_digits=12, decimal_places=0, validators=[MinValueValidator(0)], null=True)
+    transaction_id = models.CharField(max_length=255, null=True, blank=True)
+    created_date = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
 
     booking = models.OneToOneField(Booking, on_delete=models.CASCADE, default=None)
 

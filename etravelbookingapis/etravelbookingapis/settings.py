@@ -11,10 +11,12 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+MEDIA_ROOT = '%s/travels/static' % BASE_DIR
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -41,7 +43,16 @@ INSTALLED_APPS = [
     'drf_yasg',
     'ckeditor',
     'ckeditor_uploader',
+    'rest_framework',
+    'django_filters',
+    'oauth2_provider',
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'oauth2_provider.contrib.rest_framework.OAuth2Authentication',
+    )
+}
 
 AUTH_USER_MODEL = 'travels.User'
 
@@ -100,7 +111,7 @@ cloudinary.config(
 )
 
 
-CKEDITOR_UPLOAD_PATH = "images/services/"
+CKEDITOR_UPLOAD_PATH = "images/ckeditors/"
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
@@ -137,3 +148,9 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+CLIENT_ID = 'TIv2Ik5iHSxeel7j4t7uRBlDgUSmx7kaxlNSVOTu'
+CLIENT_SECRET = 'VhTyGMfRRLxyQdzn55TgMnKatVX6otFoHQaCA96tzC5oB5LcVktYG0MvKMEjGWNtKGbBafAJiLX0MCEUqK8UvqTJoSahTXLY0zZfuH9tgP3GQChyy2qmO6B196NhR3cw'
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
