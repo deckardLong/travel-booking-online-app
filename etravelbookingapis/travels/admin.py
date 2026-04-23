@@ -66,7 +66,7 @@ class MyBaseServiceAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
-        if queryset.user.is_superuser:
+        if request.user.is_superuser:
             return queryset
         return queryset.filter(provider=request.user)
 

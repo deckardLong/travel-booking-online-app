@@ -3,53 +3,56 @@ from rest_framework.response import Response
 from travels.models import User, BaseService, ComboService, TourService, HotelService, TransportService, Booking, Rating, Payment
 
 class UserSerializer(serializers.ModelSerializer):
-    avatar_url = serializers.SerializerMethodField()
-
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'role', 'avatar_url']
+        fields = ['id', 'first_name', 'last_name', 'username', 'email', 'role', 'password', 'avatar']
         extra_kwargs = {
             'password': {'write_only': True}
             }
     
-    def get_avatar_url(self, object):
-        if object.avatar:
-            return object.avatar.url
-        return None
-    
     def create(self, validated_data):
-        password = validated_data.pop('password', None)
         user = User(**validated_data)
 
-        if password:
-            user.set_password(validated_data['password'])
+        user.set_password(validated_data['password'])
         user.save()
 
         return user
         
 
-class TourServiceSerializer(serializers.ModelSerializer):
+class ServiceImageMixin:
+    def get_image_url(self, instance):
+        if instance.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(instance.image.url)
+            return instance.image.url
+        return None
+
+class TourServiceSerializer(ServiceImageMixin, serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = TourService
         fields = '__all__'
+        read_only_fields = ['provider']
 
-class HotelServiceSerializer(serializers.ModelSerializer):
+class HotelServiceSerializer(ServiceImageMixin, serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = HotelService
         fields = '__all__'
+        read_only_fields = ['provider']
 
-class TransportServiceSerializer(serializers.ModelSerializer):
+class TransportServiceSerializer(ServiceImageMixin, serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = TransportService
         fields = '__all__'
+        read_only_fields = ['provider']
 
-class BaseServiceSerializer(serializers.ModelSerializer):
+class BaseServiceSerializer(ServiceImageMixin, serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
     service_type = serializers.SerializerMethodField()
 
@@ -99,8 +102,9 @@ class PaymentSerializer(serializers.ModelSerializer):
 
 class BookingSerializer(serializers.ModelSerializer):
     payment = PaymentSerializer(read_only=True)
+    service_name = serializers.ReadOnlyField(source='service.name')
 
     class Meta:
         model = Booking
-        fields = ['id', 'status', 'quantity', 'unit_price', 'total_amount', 'customer', 'service', 'payment', 'created_date']
+        fields = ['id', 'payment', 'customer', 'service', 'service_name', 'booking_date', 'adult_count', 'child_count', 'unit_price', 'total_amount', 'status']
         read_only_fields = ['customer', 'status', 'total_amount', 'unit_price']

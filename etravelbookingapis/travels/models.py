@@ -60,18 +60,31 @@ class BaseService(BaseModel):
 
     def __str__(self):
         return self.name
+    
+    @property
+    def average_rating(self):
+        ratings = self.rating_set().all()
+        if ratings.exists():
+            return sum(r.score for r in ratings) / ratings.count()
+        return 0
 
 
 class TourService(BaseService):
     start_date = models.DateTimeField(null=True)
     end_date = models.DateTimeField(null=True)
+    duration = models.CharField(max_length=50, null=True)
+    itinerary = RichTextField(null=True, help_text='Lịch trình chi tiết')
+    meeting_point = models.CharField(max_length=255, null=True)
     available_slots = models.IntegerField(default=0)
 
 
 class HotelService(BaseService):
+    star_rating = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)], default=3)
     address = models.CharField(max_length=255, default=None)
     amenities = models.TextField(null=True)
-
+    checkin_time = models.TimeField(null=True)
+    checkout_time = models.TimeField(null=True)
+    policy = RichTextField(null=True)
 
 class TransportService(BaseService):
     VEHICLE_CHOICES = [
@@ -80,13 +93,16 @@ class TransportService(BaseService):
         ('SHIP', 'Tàu'),
     ]
     vehicle_type = models.CharField(max_length=15, choices=VEHICLE_CHOICES, default='BUS')
+    from_location = models.CharField(max_length=100, null=True)
+    to_location = models.CharField(max_length=100, null=True) 
     departure_time = models.DateTimeField()
+    arrival_time = models.DateTimeField(null=True)
     seat_capacity = models.IntegerField(validators=[MinValueValidator(1)])                               
 
 class ComboService(BaseService):
-    tour = models.ForeignKey(TourService, on_delete=models.SET_NULL, null=True, blank=True)
-    hotel = models.ForeignKey(HotelService, on_delete=models.SET_NULL, null=True, blank=True)
-    transport = models.ForeignKey(TransportService, on_delete=models.SET_NULL, null=True, blank=True)
+    tour = models.ManyToManyField(TourService, blank=True)
+    hotel = models.ManyToManyField(HotelService, blank=True)
+    transport = models.ManyToManyField(TransportService, blank=True)
 
 
 class Booking(BaseModel):  
@@ -99,6 +115,9 @@ class Booking(BaseModel):
     quantity = models.IntegerField(validators=[MinValueValidator(0)], default=0)
     unit_price = models.DecimalField(max_digits=12, decimal_places=0, null=True)
     total_amount = models.DecimalField(max_digits=12, decimal_places=0, null=True)
+    booking_date = models.DateField(null=True, help_text="Ngày nhận phòng/Ngày khởi hành")
+    adult_count = models.IntegerField(validators=[MinValueValidator(1)], default=1)
+    child_count = models.IntegerField(validators=[MinValueValidator(0)], default=0)
 
     customer = models.ForeignKey(User, on_delete=models.CASCADE)
     service = models.ForeignKey(BaseService, on_delete=models.PROTECT)

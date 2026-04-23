@@ -8,11 +8,12 @@ from rest_framework import generics, filters
 from django_filters import FilterSet, NumberFilter, CharFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.exceptions import PermissionDenied
-from django.db.models import Avg, Sum, Count, Q
+from django.db.models import Avg, Sum, Count, Q, F
 from django.db.models.functions import ExtractMonth
 from datetime import timedelta
 from django.utils import timezone
 import time
+from decimal import Decimal
 # Create your views here.
 
 class IsProvider(permissions.BasePermission):
@@ -22,7 +23,7 @@ class IsProvider(permissions.BasePermission):
 class UserViewSet(viewsets.GenericViewSet, mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin):
     queryset = User.objects.filter(is_active=True)
     serializer_class = serializers.UserSerializer
-    parser_classes = [parsers.MultiPartParser]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
 
     def get_permissions(self):
         if self.action in ['create']:
@@ -31,9 +32,18 @@ class UserViewSet(viewsets.GenericViewSet, mixins.ListModelMixin, mixins.Retriev
             return [permissions.IsAdminUser()]
         return [permissions.IsAuthenticated()]
 
-    @action(methods=['get'], detail=False, url_path='current_user')    
+    @action(methods=['get', 'patch'], detail=False, url_path='current_user', permission_classes=[permissions.IsAuthenticated()])    
     def current_user(self, request):
-        return Response(serializers.UserSerializer(request.user).data)
+        user = request.user
+        if request.method == 'PATCH':
+            serializer = serializers.UserSerializer(user, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        serializer = serializers.UserSerializer(user)
+        return Response(serializer.data)
     
     @action(methods=['patch'], detail=True, url_path='verify')
     def verify(self, request, pk=None):
@@ -81,10 +91,11 @@ class AdminStatsViewSet(viewsets.ViewSet):
             }
         })
 
-class BaseServiceViewSet(viewsets.ViewSet, viewsets.GenericViewSet, mixins.UpdateModelMixin, mixins.DestroyModelMixin):
+class BaseServiceViewSet(viewsets.ViewSet, viewsets.GenericViewSet, mixins.UpdateModelMixin, mixins.DestroyModelMixin, mixins.CreateModelMixin, mixins.ListModelMixin):
     pagination_class = paginations.ServicePagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = ServiceFilter
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser]
 
     search_fields = ['name', 'description', 'location']
     ordering_fields = ['price', 'created_date', 'view_count']
@@ -124,7 +135,7 @@ class BaseServiceViewSet(viewsets.ViewSet, viewsets.GenericViewSet, mixins.Updat
     @action(methods=['get'], detail=True, url_path='bookings')
     def get_bookings(self, request, pk=None):
         service = self.get_object()
-        if service.provider != service.user:
+        if service.provider != request.user:
             return Response({"detail": "Bạn không có quyền xem danh sách này!"}, status=status.HTTP_403_FORBIDDEN)
         
         bookings = service.booking_set.all()
@@ -187,7 +198,7 @@ class BaseServiceViewSet(viewsets.ViewSet, viewsets.GenericViewSet, mixins.Updat
         year = request.query_params.get('year', 2024)
 
         service_stats = queryset.annotate(
-            total_customers=Count('booking__user', distinct=True),
+            total_customers=Count('booking__customer', distinct=True),
             total_bookings=Count('booking'),
             total_revenue=Sum('booking__payment__amount', filter=Q(booking__payment__status='COMPLETED')),
         ).values('id', 'name', 'total_customers', 'total_bookings', 'total_revenue')
@@ -235,11 +246,30 @@ class ComboServiceViewSet(BaseServiceViewSet):
         return Response(serializers.BookingSerializer(booking).data)
 
 
-class BookingViewSet(viewsets.ViewSet, viewsets.GenericViewSet):
+class BookingViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin, mixins.CreateModelMixin, mixins.ListModelMixin):
+    queryset = Booking.objects.all()
+    serializer_class = serializers.BookingSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        service = serializer.validated_data.get('service')
+        adults = serializer.validated_data.get('adult_count', 1)
+        children = serializer.validated_data.get('child_count', 0)
+
+        unit_price = service.price
+        total = (adults * unit_price) + (children * unit_price * Decimal('0.7'))
+
+        serializer.save(
+            customer=self.request.user,
+            unit_price=unit_price,
+            total_amount=total
+        )
+
     @action(methods=['post'], detail=True, url_path='pay')
     def pay(self, request, pk=None):
         booking = self.get_object()
-        payment_method = request.data.get('method')
+        payment_method = request.data.get('method_type')
+        amount_to_pay = booking.total_amount or 0
 
         if booking.status == 'PAID':
             return Response({'detail': 'Dịch vụ này đã thanh toán!'}, status=400)
@@ -248,8 +278,9 @@ class BookingViewSet(viewsets.ViewSet, viewsets.GenericViewSet):
 
         Payment.objects.create(
             booking=booking,
-            method=payment_method,
-            amount=booking.total_amount,
+            method_type =payment_method,
+            amount=amount_to_pay,
+            status='COMPLETED',
             transaction_id = f'MOCK-TXN-{int(time.time())}'
         )
 
@@ -260,3 +291,10 @@ class BookingViewSet(viewsets.ViewSet, viewsets.GenericViewSet):
             'transaction_id': f'MOCK-TXN-{int(time.time())}',
             'amount': booking.total_amount,
         }, status=status.HTTP_200_OK)
+    
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_authenticated:
+            return Booking.objects.filter(customer=user).order_by('-created_date')
+        return Booking.objects.none()
+        
