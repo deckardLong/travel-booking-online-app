@@ -16,7 +16,7 @@ class MyUserAdmin(admin.ModelAdmin):
 
     @admin.action(description='Phê duyệt các nhà cung cấp đã chọn')
     def verify_providers(self, request, queryset):
-        updated = queryset.filter(role='PROVIDER').update(is_verified=True)
+        updated = queryset.filter(role='PROVIDER', is_verified=False).update(is_verified=True)
         self.message_user(request, f'Đã phê duyệt {updated} nhà cung cấp thành công!')
 
 

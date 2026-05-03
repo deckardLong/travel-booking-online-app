@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
+from django.conf import settings
 from cloudinary.models import CloudinaryField
 from ckeditor.fields import RichTextField
 
@@ -23,7 +24,6 @@ class MyUserManager(BaseUserManager):
         extra_fields.setdefault('is_verified', True)
         return self.create_user(username, email, password, **extra_fields)
 
-
 class User(AbstractUser):
     ROLE_CHOICES = [
         ('ADMIN', 'admin'),
@@ -44,9 +44,8 @@ class BaseModel(models.Model):
     class Meta:
         abstract = True
 
-
 class BaseService(BaseModel):
-    name = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=150, unique=True)
     description = RichTextField(null=True)
     image = CloudinaryField(null=True)
     price = models.DecimalField(max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)])
@@ -68,7 +67,6 @@ class BaseService(BaseModel):
             return sum(r.score for r in ratings) / ratings.count()
         return 0
 
-
 class TourService(BaseService):
     start_date = models.DateTimeField(null=True)
     end_date = models.DateTimeField(null=True)
@@ -76,7 +74,6 @@ class TourService(BaseService):
     itinerary = RichTextField(null=True, help_text='Lịch trình chi tiết')
     meeting_point = models.CharField(max_length=255, null=True)
     available_slots = models.IntegerField(default=0)
-
 
 class HotelService(BaseService):
     star_rating = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)], default=3)
@@ -120,8 +117,7 @@ class Booking(BaseModel):
     child_count = models.IntegerField(validators=[MinValueValidator(0)], default=0)
 
     customer = models.ForeignKey(User, on_delete=models.CASCADE)
-    service = models.ForeignKey(BaseService, on_delete=models.PROTECT)
-
+    service = models.ForeignKey(BaseService, on_delete=models.CASCADE)
 
 
 class Payment(BaseModel):
@@ -148,14 +144,39 @@ class Payment(BaseModel):
     booking = models.OneToOneField(Booking, on_delete=models.CASCADE, default=None)
 
 
-
 class Rating(BaseModel):
     score = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)], default=0)
     comment = models.TextField(default=None)
     image = CloudinaryField(null=True)
-
+    owner_reply = models.TextField(null=True, blank=True)
+    reply_date = models.DateTimeField(null=True, blank=True)        
+    
     customer = models.ForeignKey(User, on_delete=models.CASCADE, default=None)
     service = models.ForeignKey(BaseService, on_delete=models.CASCADE, default=None)
 
     class Meta:
         unique_together = ('customer', 'service')
+
+
+class Report(BaseModel):
+    STATUS_CHOICES = [
+        ('PENDING', 'Đang chờ xử lý'),
+        ('RESOLVED', 'Đã xử lý'),
+        ('DISMISSED', 'Đã bác bỏ'),
+    ]
+
+    REASON_CHOICES = [
+        ('SCAM', 'Dấu hiệu lừa đảo'),
+        ('INCORRECT_INFO', 'Thông tin không chính xác'),
+        ('BAD_SERVICE', 'Chất lượng dịch vụ kém'),
+        ('OTHER', 'Lý do khác'),
+    ]
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='report_sent')
+    service = models.ForeignKey('BaseService', on_delete=models.CASCADE, related_name='reports')
+    reason = models.CharField(max_length=50, choices=REASON_CHOICES, default='OTHER')
+    content = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+
+    def __str__(self):
+        return f"Report by {self.user.username} - {self.reason}"

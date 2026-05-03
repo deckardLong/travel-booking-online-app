@@ -1,24 +1,73 @@
 from django.shortcuts import render
-from travels.models import User, BaseService, TourService, HotelService, TransportService, ComboService, Booking, Rating, Payment
+from travels.models import User, BaseService, TourService, HotelService, TransportService, ComboService, Booking, Rating, Payment, Report
 from rest_framework import viewsets, parsers, permissions, status, mixins
 from travels import serializers, paginations
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework import generics, filters
-from django_filters import FilterSet, NumberFilter, CharFilter
+from django_filters import FilterSet, NumberFilter, CharFilter, DateFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.exceptions import PermissionDenied
 from django.db.models import Avg, Sum, Count, Q, F
 from django.db.models.functions import ExtractMonth
 from datetime import timedelta
 from django.utils import timezone
-import time
 from decimal import Decimal
+from django.utils.decorators import method_decorator
+from django.views.decorators.debug import sensitive_post_parameters
+from oauth2_provider.views.base import TokenView
+from etravelbookingapis import settings
+import time
 # Create your views here.
+
+class AdminProviderViewSet(viewsets.ViewSet):
+    permission_classes = [permissions.IsAdminUser]
+
+    @action(methods=['get'], detail=False)
+    def pending(self, request):
+        pending_users = User.objects.filter(role='PROVIDER', is_verified=False)
+        serializer = serializers.UserSerializer(pending_users, many=True)
+        return Response(serializer.data)
+    
+    @action(methods=['patch'], detail=True)
+    def approve(self, request, pk=None):
+        try:
+            user = User.objects.get(pk=pk, role='PROVIDER')
+            user.is_verified = True
+            user.save()
+            return Response({'message': 'Đã duyệt thành công!'}, status=status.HTTP_200_OK)
+        except User.DoesNotExist:
+            return Response({'error': 'Không tìm thấy Provider!'}, status=status.HTTP_404_NOT_FOUND)
+    
+    @action(methods=['delete'], detail=True)
+    def reject(self, request, pk=None):
+        try:
+            user = User.objects.get(pk=pk, role='PROVIDER', is_verified=False)
+            user.delete() 
+            return Response({'message': 'Đã từ chối và xóa yêu cầu đăng ký!'}, status=status.HTTP_200_OK)
+        except User.DoesNotExist:
+            return Response({'error': 'Không tìm thấy Provider hoặc User đã được duyệt trước đó!'}, status=status.HTTP_404_NOT_FOUND)
 
 class IsProvider(permissions.BasePermission):
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == 'PROVIDER'
+        return (
+            request.user and
+            request.user.is_authenticated and 
+            request.user.role == 'PROVIDER' and
+            getattr(request.user, 'is_verified', False)
+        )
+
+class LoginView(TokenView):
+    @method_decorator(sensitive_post_parameters('password'))
+    def post(self, request, *args, **kwargs):
+        mutable_data = request.POST.copy()
+
+        mutable_data['client_id'] = settings.CLIENT_ID
+        mutable_data['client_secret'] = settings.CLIENT_SECRET
+        mutable_data['grant_type'] = 'password'
+        
+        request.POST = mutable_data
+        return super().post(request, *args, **kwargs)
 
 class UserViewSet(viewsets.GenericViewSet, mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.CreateModelMixin):
     queryset = User.objects.filter(is_active=True)
@@ -66,30 +115,75 @@ class ServiceFilter(FilterSet):
     min_price = NumberFilter(field_name='price', lookup_expr='gte')
     max_price = NumberFilter(field_name='price', lookup_expr='lte')
     location = CharFilter(field_name='location', lookup_expr='icontains')
+    start_date = DateFilter(field_name="created_date", lookup_expr='gte')
 
     class Meta:
         model = BaseService
-        fields = ['min_price', 'max_price', 'location']
+        fields = ['min_price', 'max_price', 'location', 'start_date']
 
+class AdminReportViewSet(mixins.ListModelMixin, 
+                         mixins.UpdateModelMixin, 
+                         viewsets.GenericViewSet):
+    
+    queryset = Report.objects.all().order_by('-created_date')
+    serializer_class = serializers.ReportSerializer
+    permission_classes = [permissions.IsAdminUser]
+
+    def get_queryset(self):
+        query = self.queryset
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            query = query.filter(status=status_param)
+        return query
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        new_status = request.data.get('status')
+        
+        valid_statuses = ['RESOLVED', 'DISMISSED', 'PENDING']
+        
+        if new_status in valid_statuses:
+            instance.status = new_status
+            instance.save()
+            return Response(serializers.ReportSerializer(instance).data)
+        
+        return Response(
+            {"error": "Trạng thái không hợp lệ hoặc không được phép!"}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
 class AdminStatsViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAdminUser]
 
     def list(self, request):
         total_services = BaseService.objects.filter(active=True).count()
-        total_revenue = Payment.objects.filter(status='COMPLETED').aggregate(Sum('amount'))
+        total_revenue_query = Payment.objects.filter(status='COMPLETED',
+                                                    ).aggregate(Sum('amount'))
+        total_system_revenue = total_revenue_query['amount__sum'] or 0
         last_week = timezone.now() - timedelta(days=7)
         booking_frequency = Booking.objects.filter(created_date__gte=last_week).count()
+        total_users = User.objects.filter(is_active=True).count()
+
+        report_stats = {
+            'total': Report.objects.count(),
+            'pending': Report.objects.filter(status='PENDING').count(),
+            'resolved': Report.objects.filter(status='RESOLVED').count(),
+        }
 
         return Response({
             'total_active_services': total_services,
-            'total_system_revenue': total_revenue['amount__sum'] or 0,
+            'total_system_revenue': total_system_revenue,
             'booking_last_7_days': booking_frequency,
+            'reports': report_stats,
+            'total_users': total_users,
             'service_distribution': {
                 'tours': TourService.objects.count(),
                 'hotels': HotelService.objects.count(),
-                'transports': TransportService.objects.count()
+                'transports': TransportService.objects.count(),
+                'combos': ComboService.objects.count(),
             }
         })
+
 
 class BaseServiceViewSet(viewsets.ViewSet, viewsets.GenericViewSet, mixins.UpdateModelMixin, mixins.DestroyModelMixin, mixins.CreateModelMixin, mixins.ListModelMixin):
     pagination_class = paginations.ServicePagination
@@ -98,7 +192,7 @@ class BaseServiceViewSet(viewsets.ViewSet, viewsets.GenericViewSet, mixins.Updat
     parser_classes = [parsers.MultiPartParser, parsers.FormParser]
 
     search_fields = ['name', 'description', 'location']
-    ordering_fields = ['price', 'created_date', 'view_count']
+    ordering_fields = ['price', 'avg_rating', 'view_count']
     ordering = ['-view_count', '-created_date']
 
     def get_permissions(self):
@@ -111,10 +205,10 @@ class BaseServiceViewSet(viewsets.ViewSet, viewsets.GenericViewSet, mixins.Updat
         return [permissions.IsAuthenticated()]
     
     def get_queryset(self):
-        query = self.queryset.filter(active=True)
+        query = self.queryset.annotate(avg_rating=Avg('rating__score'))
         if self.request.user.is_authenticated and self.request.user.role == 'PROVIDER':
-            return self.queryset.filter(provider=self.request.user)
-        return query
+            return query.filter(provider=self.request.user)
+        return query.filter(active=True)
     
     def perform_create(self, serializer):
         if not getattr(self.request.user, 'is_verified', False):
@@ -166,15 +260,15 @@ class BaseServiceViewSet(viewsets.ViewSet, viewsets.GenericViewSet, mixins.Updat
         )
         return Response(serializers.BookingSerializer(booking).data, status=status.HTTP_201_CREATED)
     
-    @action(methods=['get'], detail=False, url_path='compare')
+    @action(methods=['get'], detail=False, url_path='compare/(?P<ids>[^/.]+)')
     def compare(self, request):
         ids_raw = request.query_params.get('ids')
         if not ids_raw:
-            return Response({'detail': 'Hãy chọn ít nhất 2 dịch vụ để so sánh!'})
+            return Response({'detail': 'Hãy chọn ít nhất 2 dịch vụ để so sánh!'}, status=status.HTTP_400_BAD_REQUEST)
         ids = ids_raw.split(',')
-        queryset = self.get_queryset().filter(id__in=ids).annotate(
-            avg_rating=Avg('rating__score')
-        ) 
+        queryset = self.get_queryset().filter(id__in=ids)
+        if queryset.count() < 2:
+            return Response({'detail': 'Không tìm thấy đủ dữ liệu để so sánh!'}, status=status.HTTP_400_BAD_REQUEST)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
     
@@ -197,6 +291,11 @@ class BaseServiceViewSet(viewsets.ViewSet, viewsets.GenericViewSet, mixins.Updat
         queryset = self.get_queryset().filter(provider=user)
         year = request.query_params.get('year', 2024)
 
+        new_bookings_count = Booking.objects.filter(
+            service__provider=user,
+            status='PENDING'
+        ).count()
+
         service_stats = queryset.annotate(
             total_customers=Count('booking__customer', distinct=True),
             total_bookings=Count('booking'),
@@ -210,6 +309,8 @@ class BaseServiceViewSet(viewsets.ViewSet, viewsets.GenericViewSet, mixins.Updat
         ).annotate(month=ExtractMonth('created_date')).values('month').annotate(revenue=Sum('payment__amount'), count=Count('id')).order_by('month')
 
         return Response({
+            'count': queryset.count(),
+            'new_bookings': new_bookings_count,
             'service_summary': service_stats,
             'monthly_chart': monthly_stats
         })
@@ -264,6 +365,12 @@ class BookingViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin, mixins.
             unit_price=unit_price,
             total_amount=total
         )
+    
+    @action(methods=['get'], detail=False, url_path='provider_bookings')
+    def get_provider_bookings(self, request):
+        bookings = Booking.objects.filter(service__provider=request.user).order_by('-created_date')
+        serializer = serializers.BookingSerializer(bookings, many=True)
+        return Response(serializer.data)
 
     @action(methods=['post'], detail=True, url_path='pay')
     def pay(self, request, pk=None):
@@ -297,4 +404,57 @@ class BookingViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin, mixins.
         if user.is_authenticated:
             return Booking.objects.filter(customer=user).order_by('-created_date')
         return Booking.objects.none()
+
+
+class RatingViewSet(viewsets.ViewSet, viewsets.generics.UpdateAPIView, viewsets.generics.ListAPIView):
+    queryset = Rating.objects.all()
+    serializer_class = serializers.RatingSerializer
+
+    @action(methods=['patch'], detail=True, url_path='reply')
+    def reply(self, request, pk=None):
+        instance = self.get_object()
+
+        if instance.service.provider != request.user:
+            return Response({"detail": "Bạn không có quyền phản hồi đánh giá này!"}, status=status.HTTP_403_FORBIDDEN)
+        reply_content = request.data.get('owner_reply')
+        if not reply_content:
+            return Response({"detail": "Nội dung phản hồi không được trống!"}, status=status.HTTP_400_BAD_REQUEST)
         
+        instance.owner_reply = reply_content
+        instance.reply_date = timezone.now()
+        instance.save()
+
+        return Response(self.serializer_class(instance).data, status=status.HTTP_200_OK)
+    
+    def get_permissions(self):
+        if self.action == 'reply':
+            return [IsProvider()]
+        return [permissions.AllowAny()]
+    
+    def get_queryset(self):
+        query = super().get_queryset()
+        
+        if self.request.user.is_authenticated and getattr(self.request.user, 'role', '') == 'PROVIDER':
+            return query.filter(service__provider=self.request.user).order_by('-id')      
+        return query
+
+
+class ReportViewSet(viewsets.GenericViewSet, mixins.CreateModelMixin, mixins.ListModelMixin):
+    serializer_class = serializers.ReportSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Report.objects.filter(user=self.request.user).order_by('-id')
+    
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+class ProviderReportViewSet(viewsets.GenericViewSet, mixins.ListModelMixin):
+    serializer_class = serializers.ReportSerializer
+    permission_classes = [IsProvider] 
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == 'PROVIDER':
+            return Report.objects.filter(service__provider=user).order_by('-created_date')
+        return Report.objects.none() 

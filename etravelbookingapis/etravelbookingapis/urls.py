@@ -21,6 +21,7 @@ from rest_framework import permissions
 from drf_yasg import openapi
 from drf_yasg.views import get_schema_view
 from travels.admin import admin_site
+from travels import views
 from etravelbookingapis import settings
 
 schema_view = get_schema_view(
@@ -38,6 +39,7 @@ schema_view = get_schema_view(
 urlpatterns = [
     path('', include('travels.urls')),
     path('admin/', admin_site.urls),
+    path('mobile-login/', views.LoginView.as_view(), name='mobile_login'),
     path('o/', include('oauth2_provider.urls',
             namespace='oauth2_provider')),
     re_path(r'^swagger(?P<format>\.json|\.yaml)$',
