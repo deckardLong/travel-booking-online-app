@@ -1,0 +1,191 @@
+import { StyleSheet, Platform } from "react-native";
+
+export default StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#F8FAFC',
+    },
+    loader: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    header: {
+        paddingTop: Platform.OS === 'ios' ? 60 : 45,
+        paddingBottom: 45,
+        paddingHorizontal: 20,
+        borderBottomLeftRadius: 35,
+        borderBottomRightRadius: 35,
+    },
+    headerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    avatarBorder: {
+        padding: 2,
+        backgroundColor: 'rgba(255, 255, 255, 0.3)',
+        borderRadius: 100,
+    },
+    headerInfo: {
+        marginLeft: 15,
+        flex: 1,
+    },
+    welcome: {
+        color: 'rgba(255, 255, 255, 0.8)',
+        fontSize: 14,
+    },
+    name: {
+        color: '#ffffff',
+        fontSize: 20,
+        fontWeight: 'bold',
+    },
+    summaryContainer: {
+        paddingHorizontal: 20,
+        marginTop: -30,
+    },
+    totalCard: {
+        backgroundColor: '#ffffff',
+        borderRadius: 24,
+        padding: 24,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        elevation: 10,
+        shadowColor: '#088395',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.15,
+        shadowRadius: 15,
+        overflow: 'hidden', 
+    },
+    decorCircle: {
+        position: 'absolute',
+        right: -20,
+        top: -20,
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: '#E0F2F1',
+        zIndex: -1,
+    },
+    totalLabel: {
+        fontSize: 14,
+        color: '#64748B',
+        fontWeight: '500',
+    },
+    totalValueContainer: {
+        flexDirection: 'row',
+        alignItems: 'baseline',
+    },
+    totalValue: {
+        fontSize: 42, 
+        fontWeight: '900',
+        color: '#088395'
+    },
+    unitText: {
+        fontSize: 16,
+        color: '#94A3B8',
+        marginLeft: 8,
+        fontWeight: 'bold',
+    },
+    grid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        padding: 10,
+        justifyContent: 'space-between',
+    },
+    gridItem: {
+        width: '46%',
+        backgroundColor: '#ffffff',
+        borderRadius: 18,
+        padding: 15,
+        margin: '2%',
+        alignItems: 'center',
+        elevation: 2,
+    },
+    gridIcon: {
+        backgroundColor: '#F1F5F9',
+        margin: 0,
+    },
+    gridValueText: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#1E293B',
+        marginTop: 5,
+    },
+    gridLabelText: {
+        fontSize: 12,
+        color: '#94A3B8',
+        fontWeight: 'bold',
+        textTransform: 'uppercase',
+    },
+    menuSection: {
+        paddingHorizontal: 20,
+        paddingBottom: 30,
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#1E293B',
+        marginBottom: 15,
+        marginTop: 10,
+    },
+    menuCard: {
+        marginBottom: 12,
+        borderRadius: 16,
+        backgroundColor: '#ffffff',
+    },
+    menuContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+    },
+    iconWrapper: {
+        position: 'relative',
+    },
+    menuTextContainer: {
+        marginLeft: 15,
+        flex: 1,
+    },
+    menuTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#1E293B',
+    },
+    menuSubtitle: {
+        fontSize: 13,
+        color: '#94A3B8',
+        marginTop: 2,
+    },
+    redDot: {
+        position: 'absolute',
+        top: -2,
+        right: -2,
+        width: 12,
+        height: 12,
+        backgroundColor: '#EF4444',
+        borderRadius: 6,
+        borderWidth: 2,
+        borderColor: '#ffffff',
+    },
+    statusActiveContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#E6FFFA',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        marginTop: 8,
+    },
+    statusDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#38B2AC',
+        marginRight: 6,
+    },
+    statusTextLabel: {
+        color: '#088395',
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
+});

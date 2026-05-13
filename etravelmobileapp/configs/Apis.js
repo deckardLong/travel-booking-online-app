@@ -28,6 +28,7 @@ export const endpoints = {
     'reports' : `/admin-reports/`,
     'users': '/users/',
     'services': (type) => `/${type}/`,
+    'approve-service': (type, id) => `/${type}/${id}/`,
     'customer-report': '/customer-reports/',
     'provder-report': '/provider-reports/'
 };

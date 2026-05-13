@@ -156,11 +156,12 @@ class AdminStatsViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAdminUser]
 
     def list(self, request):
+        now = timezone.now()
+        current_year = now.year
+        last_week = now - timedelta(days=7)
         total_services = BaseService.objects.filter(active=True).count()
-        total_revenue_query = Payment.objects.filter(status='COMPLETED',
-                                                    ).aggregate(Sum('amount'))
+        total_revenue_query = Payment.objects.filter(status='COMPLETED').aggregate(Sum('amount'))
         total_system_revenue = total_revenue_query['amount__sum'] or 0
-        last_week = timezone.now() - timedelta(days=7)
         booking_frequency = Booking.objects.filter(created_date__gte=last_week).count()
         total_users = User.objects.filter(is_active=True).count()
 
@@ -169,6 +170,32 @@ class AdminStatsViewSet(viewsets.ViewSet):
             'pending': Report.objects.filter(status='PENDING').count(),
             'resolved': Report.objects.filter(status='RESOLVED').count(),
         }
+
+        monthly_revenue_qs = Payment.objects.filter(
+            status='COMPLETED',
+            created_date__year=current_year # Chỉ lấy năm nay
+        ).annotate(
+            month=ExtractMonth('created_date')
+        ).values('month').annotate(
+            revenue=Sum('amount')
+        ).order_by('month')
+
+        monthly_chart = list(monthly_revenue_qs)
+        top_services_qs = BaseService.objects.filter(
+            booking__payment__status='COMPLETED'
+        ).annotate(
+            total_bookings=Count('booking', distinct=True),
+            total_revenue=Sum('booking__payment__amount')
+        ).filter(total_revenue__gt=0).order_by('-total_revenue')[:5]
+
+        service_summary = [
+            {
+                "name": service.name, 
+                "total_bookings": service.total_bookings,
+                "total_revenue": service.total_revenue
+            }
+            for service in top_services_qs
+        ]
 
         return Response({
             'total_active_services': total_services,
@@ -181,7 +208,9 @@ class AdminStatsViewSet(viewsets.ViewSet):
                 'hotels': HotelService.objects.count(),
                 'transports': TransportService.objects.count(),
                 'combos': ComboService.objects.count(),
-            }
+            },
+            'monthly_chart': monthly_chart,
+            'service_summary': service_summary
         })
 
 
@@ -195,19 +224,35 @@ class BaseServiceViewSet(viewsets.ViewSet, viewsets.GenericViewSet, mixins.Updat
     ordering_fields = ['price', 'avg_rating', 'view_count']
     ordering = ['-view_count', '-created_date']
 
+    def create(self, request, *args, **kwargs):
+        print("DỮ LIỆU FRONTEND GỬI LÊN:", request.data) # Xem mảng tour, hotel gửi lên có đúng không
+        return super().create(request, *args, **kwargs)
+
     def get_permissions(self):
         if self.action in ['list', 'retrieve']:
             return [permissions.AllowAny()]
+            
         if self.action == 'create':
             return [IsProvider()]
+            
         if self.action in ['update', 'partial_update', 'destroy']:
+            if self.request.user.is_authenticated and getattr(self.request.user, 'role', '') == 'ADMIN':
+                return [permissions.IsAuthenticated()]
             return [IsProvider(), IsOwnerOrReadOnly()]
+            
         return [permissions.IsAuthenticated()]
     
     def get_queryset(self):
         query = self.queryset.annotate(avg_rating=Avg('rating__score'))
-        if self.request.user.is_authenticated and self.request.user.role == 'PROVIDER':
+
+        if not self.request.user.is_authenticated:
+            return query.filter(active=True)
+    
+        if self.request.user.role == 'PROVIDER':
             return query.filter(provider=self.request.user)
+ 
+        if self.request.user.role == 'ADMIN':
+            return query
         return query.filter(active=True)
     
     def perform_create(self, serializer):
@@ -327,6 +372,14 @@ class TransportServiceViewSet(BaseServiceViewSet):
     queryset = TransportService.objects.all()
     serializer_class = serializers.TransportServiceSerializer
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        vehicle_type = self.request.query_params.get('vehicle_type')
+
+        if vehicle_type:
+            queryset = queryset.filter(vehicle_type=vehicle_type)
+        return queryset
+
 class ComboServiceViewSet(BaseServiceViewSet):
     queryset = ComboService.objects.all()
     serializer_class = serializers.ComboServiceSerializer
@@ -344,7 +397,7 @@ class ComboServiceViewSet(BaseServiceViewSet):
             total_amount=getattr(combo, 'price', 0) * quantity,
             status='PENDING',
         )
-        return Response(serializers.BookingSerializer(booking).data)
+        return Response(serializers.BookingSerializer(booking).data)   
 
 
 class BookingViewSet(viewsets.GenericViewSet, mixins.RetrieveModelMixin, mixins.CreateModelMixin, mixins.ListModelMixin):

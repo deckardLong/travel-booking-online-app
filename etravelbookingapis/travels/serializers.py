@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from rest_framework.response import Response
 from travels.models import User, BaseService, ComboService, TourService, HotelService, TransportService, Booking, Rating, Payment, Report
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -58,40 +59,80 @@ class BaseServiceSerializer(ServiceImageMixin, serializers.ModelSerializer):
 
 class TourServiceSerializer(ServiceImageMixin, serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
+    provider_name = serializers.CharField(source='provider.username', read_only=True)
+    provider_avatar = serializers.SerializerMethodField()
 
     class Meta:
         model = TourService
         fields = '__all__'
         read_only_fields = ['provider']
+    
+    def get_provider_avatar(self, obj):
+        if obj.provider and obj.provider.avatar:
+            return str(obj.provider.avatar)
+        return None
 
 class HotelServiceSerializer(ServiceImageMixin, serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
+    provider_name = serializers.CharField(source='provider.username', read_only=True)
+    provider_avatar = serializers.SerializerMethodField()
 
     class Meta:
         model = HotelService
         fields = '__all__'
         read_only_fields = ['provider']
+    
+    def get_provider_avatar(self, obj):
+        if obj.provider and obj.provider.avatar:
+            return str(obj.provider.avatar)
+        return None
 
 class TransportServiceSerializer(ServiceImageMixin, serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
+    provider_name = serializers.CharField(source='provider.username', read_only=True)
+    provider_avatar = serializers.SerializerMethodField()
 
     class Meta:
         model = TransportService
         fields = '__all__'
         read_only_fields = ['provider']
+    
+    def get_provider_avatar(self, obj):
+        if obj.provider and obj.provider.avatar:
+            return str(obj.provider.avatar)
+        return None
 
 class ComboServiceSerializer(serializers.ModelSerializer):
-    tour = serializers.CharField(source='tour.name', read_only=True)
-    hotel = serializers.CharField(source='hotel.name', read_only=True)
-    transport = serializers.CharField(source='transport.name', read_only=True)
+    tour = serializers.PrimaryKeyRelatedField(many=True, queryset=TourService.objects.all(), required=False)
+    hotel = serializers.PrimaryKeyRelatedField(many=True, queryset=HotelService.objects.all(), required=False)
+    transport = serializers.PrimaryKeyRelatedField(many=True, queryset=TransportService.objects.all(), required=False)
+    provider_name = serializers.CharField(source='provider.username', read_only=True)
+    provider_avatar = serializers.SerializerMethodField()
 
     class Meta:
         model = ComboService
         fields = '__all__'
+        extra_kwargs = {
+            'provider': {'read_only': True}
+        }
+    
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        
+        representation['tour'] = TourServiceSerializer(instance.tour.all(), many=True).data
+        representation['hotel'] = HotelServiceSerializer(instance.hotel.all(), many=True).data
+        representation['transport'] = TransportServiceSerializer(instance.transport.all(), many=True).data
+        
+        return representation
+    
+    def get_provider_avatar(self, obj):
+        if obj.provider and obj.provider.avatar:
+            return str(obj.provider.avatar)
+        return None
 
 
 class RatingSerializer(serializers.ModelSerializer):
-    customer_name = serializers.ReadOnlyField(source='customer.username')
+    customer_name = serializers.SerializerMethodField()
     customer_avatar = serializers.SerializerMethodField()
     image = serializers.SerializerMethodField()
 
@@ -109,6 +150,12 @@ class RatingSerializer(serializers.ModelSerializer):
         if rating.customer and rating.customer.avatar:
             return rating.customer.avatar.url
         return None
+    
+    def get_customer_name(self, rating):
+        if rating.customer:
+            full_name = f"{rating.customer.first_name} {rating.customer.last_name}".strip()
+            return full_name if full_name else rating.customer.username
+        return "Khách hàng ẩn danh"
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -131,6 +178,7 @@ class BookingSerializer(serializers.ModelSerializer):
 class ReportSerializer(serializers.ModelSerializer):
     reason_display = serializers.CharField(source='get_reason_display', read_only=True)
     user = serializers.PrimaryKeyRelatedField(read_only=True)
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     class Meta:
         model = Report

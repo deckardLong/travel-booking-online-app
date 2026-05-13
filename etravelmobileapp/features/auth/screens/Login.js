@@ -97,7 +97,7 @@ const Login = ({navigation}) => {
             >
                 <ScrollView contentContainerStyle={styles.scrollContent}>
                     <View style={styles.header}>
-                        <Avatar.Icon size={80} icon="airplane-takeoff" style={styles.iconCircle} color="#3b5998" />
+                        <Avatar.Icon size={80} icon="airplane-takeoff" style={styles.iconCircle} color="#ffffff" />
                         <Text variant="headlineMedium" style={styles.welcomeText}>E-Travel App</Text>
                         <Text variant="bodyMedium" style={styles.subText}>Khám phá thế giới cùng chúng tôi</Text>
                     </View>
@@ -137,6 +137,7 @@ const Login = ({navigation}) => {
                             disabled={loading}
                             style={styles.loginBtn}
                             contentStyle={styles.loginBtnContent}
+                            labelStyle={styles.loginBtnText}
                         >
                             ĐĂNG NHẬP
                         </Button>

@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import styles from "../AuthStyles";
 import apis, { endpoints } from "../../../configs/apis";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const Register = ({navigation}) => {
     const [user, setUser] = useState({
@@ -19,6 +20,7 @@ const Register = ({navigation}) => {
     const [avatar, setAvatar] = useState(null);
     const [loading, setLoading] = useState(false);
     const [secureText, setSecureText] = useState(true);
+    const insets = useSafeAreaInsets();
 
     const updateState = (field, value) => {
         setUser(current => ({...current, [field]: value}));
@@ -104,9 +106,15 @@ const Register = ({navigation}) => {
                     behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                     style={{flex: 1}}
                 >
-                    <ScrollView contentContainerStyle={styles.scrollContent}>
+                    <ScrollView 
+                        contentContainerStyle={[
+                            styles.scrollContent, 
+                            { paddingTop: insets.top + 20 }
+                    ]} 
+                        showsVerticalScrollIndicator={false}
+                    >
                         <View style={styles.header}>
-                            <Avatar.Icon size={60} icon="account-plus" style={styles.iconCircle} color="#3b5998" />
+                            <Avatar.Icon size={60} icon="account-plus" style={styles.iconCircle} color="#ffffff" />
                             <Text variant="headlineMedium" style={styles.welcomeText}>Đăng Ký</Text>
                             <Text variant="bodyMedium" style={styles.subText}>Tạo tài khoản để bắt đầu hành trình</Text>
                         </View>
